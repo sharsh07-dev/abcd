@@ -31,6 +31,8 @@ class RunResult(BaseModel):
     elapsed_seconds: Optional[float] = None
     team_name: Optional[str] = None
     leader_name: Optional[str] = None
+    iterations_used: Optional[int] = 0
+    max_retries: Optional[int] = 5
 
 # Request models
 class RunAgentRequest(BaseModel):

@@ -30,7 +30,7 @@ function App() {
                         </div>
                         <div>
                             <h1 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500">
-                                Autonomous CI/CD Healing Core
+                                Autonomous CI/CD Healing Core <span className="text-[10px] opacity-50 font-mono ml-2">v1.2</span>
                             </h1>
                             <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600 tracking-widest uppercase">
                                 <span className="flex items-center gap-1"><ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Multi-Agent</span>
@@ -80,9 +80,9 @@ function App() {
                     {/* Mission identifier banner */}
                     {currentResult ? (
                         <div className={`flex items-center justify-between p-5 rounded-2xl border shadow-2xl backdrop-blur-sm transition-all ${isActive ? 'bg-blue-950/30 border-blue-700/40 border-l-4 border-l-blue-500' :
-                                currentResult.ci_status === 'RESOLVED' ? 'bg-emerald-950/20 border-emerald-700/40 border-l-4 border-l-emerald-500' :
-                                    currentResult.ci_status === 'PARTIAL' ? 'bg-amber-950/20 border-amber-700/40 border-l-4 border-l-amber-500' :
-                                        'bg-red-950/20 border-red-700/40 border-l-4 border-l-red-500'
+                            currentResult.ci_status === 'RESOLVED' ? 'bg-emerald-950/20 border-emerald-700/40 border-l-4 border-l-emerald-500' :
+                                currentResult.ci_status === 'PARTIAL' ? 'bg-amber-950/20 border-amber-700/40 border-l-4 border-l-amber-500' :
+                                    'bg-red-950/20 border-red-700/40 border-l-4 border-l-red-500'
                             }`}>
                             <div className="min-w-0 flex-1">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Mission Identifier</p>
@@ -95,10 +95,10 @@ function App() {
                             </div>
                             <div className="pl-4 flex-shrink-0">
                                 <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-black border uppercase tracking-widest shadow-lg ${currentResult.ci_status === 'RESOLVED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40' :
-                                        currentResult.ci_status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/40' :
-                                            currentResult.ci_status === 'FAILED' ? 'bg-red-500/10 text-red-400 border-red-500/40' :
-                                                ['PENDING', 'QUEUED'].includes(currentResult.ci_status) ? 'bg-amber-500/10 text-amber-400 border-amber-500/40 animate-pulse' :
-                                                    'bg-blue-500/10 text-blue-400 border-blue-500/40 animate-pulse'
+                                    currentResult.ci_status === 'PARTIAL' ? 'bg-amber-500/10 text-amber-400 border-amber-500/40' :
+                                        currentResult.ci_status === 'FAILED' ? 'bg-red-500/10 text-red-400 border-red-500/40' :
+                                            ['PENDING', 'QUEUED'].includes(currentResult.ci_status) ? 'bg-amber-500/10 text-amber-400 border-amber-500/40 animate-pulse' :
+                                                'bg-blue-500/10 text-blue-400 border-blue-500/40 animate-pulse'
                                     }`}>
                                     {isActive && <Loader2 className="w-3 h-3 animate-spin" />}
                                     {currentResult.ci_status === 'RESOLVED' && <CheckCircle2 className="w-3 h-3" />}
