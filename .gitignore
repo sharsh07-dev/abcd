@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.DS_Store
+.env
+backend/workspace/*
+!backend/workspace/.gitkeep
+backend/results/*
+!backend/results/.gitkeep
