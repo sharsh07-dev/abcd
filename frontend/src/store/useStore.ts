@@ -37,6 +37,8 @@ export interface RunResult {
     elapsed_seconds?: number;
     team_name?: string;
     leader_name?: string;
+    iterations_used?: number;
+    max_retries?: number;
 }
 
 export interface RunHistoryItem {
@@ -144,6 +146,8 @@ export const useStore = create<AppState>()(
                         elapsed_seconds: 0,
                         team_name: teamName.toUpperCase(),
                         leader_name: leaderName.toUpperCase(),
+                        iterations_used: 0,
+                        max_retries: 5,
                     };
 
                     set({ runId: newRunId, currentResult: tempResult, isLoading: false });
@@ -170,8 +174,9 @@ export const useStore = create<AppState>()(
                             // Keep optimistic
                         }
                     }
-                } catch (err) {
-                    console.error('fetchRuns failed', err);
+                } catch (err: any) {
+                    console.error(`[fetchRuns] Failed to talk to backend at ${API_URL}:`, err);
+                    // Don't set state error here to avoid annoying toast on background poll
                 }
             },
 

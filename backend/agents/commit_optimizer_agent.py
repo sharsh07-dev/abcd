@@ -48,11 +48,23 @@ class CommitOptimizerAgent:
         try:
             self.repo = git.Repo(str(self.repo_path))
             self._ensure_branch()
+            
+            self.state.timeline.append(CITimelineEvent(
+                iteration=self.state.iteration,
+                event_type="COMMIT_START",
+                description=f"Grouping {len(self.state.fixes)} fixes into commits..."
+            ))
+
             commit_shas = self._group_and_commit()
             
             # 🚀 PUSH TO REMOTE
             push_success = False
             if commit_shas and not (self.state.repo_url.startswith("/") or self.state.repo_url.startswith("file://")):
+                self.state.timeline.append(CITimelineEvent(
+                    iteration=self.state.iteration,
+                    event_type="PUSH_START",
+                    description=f"Pushing {len(commit_shas)} commits to origin branch {self.state.branch_name}..."
+                ))
                 push_success = self._push_to_remote()
 
             elapsed = time.time() - t0
@@ -61,11 +73,14 @@ class CommitOptimizerAgent:
             if push_success:
                 description += " and successfully pushed to origin"
             elif commit_shas:
-                description += " (local only, no token or push failed)"
+                if not settings.GITHUB_TOKEN:
+                    description += " (Commited locally ONLY — GITHUB_TOKEN missing)"
+                else:
+                    description += " (Commit created locally, but Push failed)"
 
             self.state.timeline.append(CITimelineEvent(
                 iteration=self.state.iteration,
-                event_type="COMMIT",
+                event_type="COMMIT_COMPLETE",
                 description=description,
                 duration_seconds=elapsed,
             ))

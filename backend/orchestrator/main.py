@@ -29,7 +29,36 @@ def run_healing_agent(repo_url: str, branch_name: str, run_id: str):
             shutil.rmtree(repo_dir)
         os.makedirs(repo_dir, exist_ok=True)
         
+        # We pass a callback to run_healing_pipeline to update the JSON progressively
+        def update_callback(state: AgentState):
+            _write_results(state)
+
+        # 1. Create initial state with MISSION_INITIALIZED event
+        from backend.utils.models import CITimelineEvent
+        initial_state = AgentState(
+            run_id=run_id,
+            repo_url=repo_url,
+            repo_path=repo_dir,
+            branch_name=branch_name,
+            start_time=time.time(),
+            timeline=[
+                CITimelineEvent(
+                    iteration=0,
+                    event_type="INITIALIZATION",
+                    description=f"Mission initialized: Targeting {repo_url}"
+                )
+            ]
+        )
+        _write_results(initial_state)
+
+        # 2. Start Cloning
         logger.info(f"Cloning {repo_url} to {repo_dir}...")
+        initial_state.timeline.append(CITimelineEvent(
+            iteration=0,
+            event_type="CLONING",
+            description=f"Cloning repository into isolated workspace..."
+        ))
+        _write_results(initial_state)
         
         if repo_url.startswith("/") or repo_url.startswith("file://"):
             source_path = repo_url.replace("file://", "")
@@ -43,16 +72,20 @@ def run_healing_agent(repo_url: str, branch_name: str, run_id: str):
         else:
             repo = Repo.clone_from(repo_url, repo_dir)
         
-        # We pass a callback to run_healing_pipeline to update the JSON progressively
-        def update_callback(state: AgentState):
-            _write_results(state)
+        initial_state.timeline.append(CITimelineEvent(
+            iteration=0,
+            event_type="CLONING_COMPLETE",
+            description=f"Repository clone successful. Launching LangGraph pipeline."
+        ))
+        _write_results(initial_state)
 
         final_state = run_healing_pipeline(
             repo_path=repo_dir,
             repo_url=repo_url,
             run_id=run_id,
             branch_name=branch_name,
-            on_update=update_callback
+            on_update=update_callback,
+            initial_state=initial_state
         )
 
         _write_results(final_state)
@@ -96,14 +129,18 @@ def _write_results(state: AgentState):
             repo_path_str = str(state.repo_path)
             if rel_path.startswith(repo_path_str):
                 rel_path = os.path.relpath(rel_path, repo_path_str)
+            
+            # Clean up error type (remove Enum prefix)
+            err_type = str(fix.failure_type).split('.')[-1]
+            
             fixes_data.append({
                 "file_path": rel_path,
-                "error_type": str(fix.failure_type),
+                "error_type": err_type,
                 "original_snippet": fix.original_code,
                 "patched_snippet": fix.patched_code,
                 "tests_passed": fix.validated,
                 "line_number": getattr(fix, 'line_number', None),
-                "commit_message": f"[AI-AGENT] Fix {str(fix.failure_type)} in {os.path.basename(rel_path)}"
+                "commit_message": f"[AI-AGENT] Fix {err_type} in {os.path.basename(rel_path)}"
             })
 
     timeline_strings = []
@@ -115,10 +152,12 @@ def _write_results(state: AgentState):
     start_t = getattr(state, 'start_time', None) or time.time()
     elapsed = round(time.time() - start_t, 1)
 
-    # Parse team/leader from branch name (TEAM_LEADER_AI_FIX)
-    branch_parts = state.branch_name.split('_')
-    team_name = branch_parts[0] if len(branch_parts) > 0 else ""
-    leader_name = "_".join(branch_parts[1:-2]) if len(branch_parts) > 2 else ""
+    # Parse team/leader from branch name (TEAM_NAME_LEADER_NAME_AI_FIX)
+    # RIFT_ORGANISERS_SAIYAM_KUMAR_AI_FIX -> Team: RIFT_ORGANISERS, Leader: SAIYAM_KUMAR
+    branch_parts = state.branch_name.replace("_AI_FIX", "").split('_')
+    mid = len(branch_parts) // 2
+    team_name = "_".join(branch_parts[:mid]) if len(branch_parts) > 1 else branch_parts[0]
+    leader_name = "_".join(branch_parts[mid:]) if len(branch_parts) > 1 else ""
 
     result_data = {
         "repo_url": state.repo_url,
@@ -130,6 +169,8 @@ def _write_results(state: AgentState):
         "fixes": fixes_data,
         "ci_timeline": timeline_strings,
         "scoring": scoring_data,
+        "iterations_used": getattr(state, 'iteration', 0),
+        "max_retries": getattr(state, 'max_retries', 5),
         "start_time": start_t,
         "elapsed_seconds": elapsed,
         "team_name": team_name,

@@ -37,27 +37,37 @@ logger.info(f"Using results directory: {RESULTS_DIR}")
 
 @app.get("/")
 async def root():
-    return {"status": "AI Core Online", "version": "1.0.0"}
+    is_writable = os.access(RESULTS_DIR, os.W_OK)
+    return {
+        "status": "AI Core Online",
+        "version": "1.0.0",
+        "results_dir": str(RESULTS_DIR),
+        "is_writable": is_writable,
+        "environment": "Vercel" if os.environ.get("VERCEL") else "Regular"
+    }
 
 @app.get("/runs")
 async def list_runs():
     """List all recent runs, sorted by modification time."""
     try:
         runs = []
-        files = []
         if not os.path.exists(RESULTS_DIR):
-            logger.warning(f"Results dir not found: {RESULTS_DIR}")
+            logger.warning(f"Results directory does not exist yet: {RESULTS_DIR}")
             return []
             
-        for filename in os.listdir(RESULTS_DIR):
-            if filename.endswith(".json") and filename != "results.json":
-                file_path = os.path.join(RESULTS_DIR, filename)
-                files.append((filename, os.path.getmtime(file_path)))
+        files = []
+        try:
+            for filename in os.listdir(RESULTS_DIR):
+                if filename.endswith(".json") and filename != "results.json":
+                    file_path = os.path.join(RESULTS_DIR, filename)
+                    files.append((filename, os.path.getmtime(file_path)))
+        except Exception as dir_err:
+            logger.error(f"Failed to list results directory: {dir_err}")
+            return []
         
         files.sort(key=lambda x: x[1], reverse=True)
-        logger.info(f"Found {len(files)} run files in {RESULTS_DIR}")
-
-        for filename, _ in files[:20]: # Limit to 20 for history
+        
+        for filename, _ in files[:30]: # Limit to 30 for history
             try:
                 with open(os.path.join(RESULTS_DIR, filename), 'r') as f:
                     data = json.load(f)
@@ -72,39 +82,29 @@ async def list_runs():
                 logger.debug(f"Error reading {filename}: {e}")
         return runs
     except Exception as e:
-        logger.error(f"Error listing runs: {e}")
+        logger.error(f"Unexpected error in list_runs: {e}")
         return []
-
-def _background_agent_runner(repo_url: str, branch_name: str, run_id: str):
-    """Wrapper to run the sync agent function in a thread executor if needed, 
-    but since it is sync, we can run it directly in background task or 
-    wrap in run_in_executor to avoid blocking the event loop."""
-    logger.info(f"Starting healing agent for {run_id} on branch {branch_name}")
-    try:
-        # The prompt says run_healing_agent is synchronous.
-        # To avoid blocking the main thread, we should run it in an executor.
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        # However, FastAPI's BackgroundTasks run in a separate thread pool for sync functions automatically? 
-        # Actually starlette/fastapi runs sync background tasks in a threadpool.
-        run_healing_agent(repo_url, branch_name, run_id)
-        logger.info(f"Healing agent completed for {run_id}")
-    except Exception as e:
-        logger.error(f"Error in background agent runner: {str(e)}")
 
 @app.post("/run-agent")
 async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks):
     try:
         # Generate Run ID
         run_id = str(uuid4())
+        logger.info(f"Received run-agent request for {request.repo_url} (Run ID: {run_id})")
         
-        # Validate Branch Name logic per prompt
-        expected_branch = f"{request.team_name}_{request.leader_name}_AI_Fix".upper()
-        if request.branch_name != expected_branch:
-             pass
+        # Consistent Branch Name logic
+        branch_prefix = f"{request.team_name}_{request.leader_name}".upper().replace(" ", "_")
+        expected_branch = f"{branch_prefix}_AI_FIX"
+        
+        # 1. Validation for filesystem
+        if not os.path.exists(RESULTS_DIR):
+            os.makedirs(RESULTS_DIR, exist_ok=True)
 
-        # Write initial QUEUED state immediately to disk
-        # This prevents 404 race conditions if background task is slow to start
+        if not os.access(RESULTS_DIR, os.W_OK):
+             logger.error(f"RESULTS_DIR is not writable: {RESULTS_DIR}")
+             raise HTTPException(status_code=500, detail=f"Filesystem Error: Missing write permissions for {RESULTS_DIR}")
+
+        # 2. Write initial state
         initial_file = os.path.join(RESULTS_DIR, f"{run_id}.json")
         now = time.time()
         initial_data = {
@@ -123,13 +123,23 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
             "start_time": now,
             "elapsed_seconds": 0,
             "team_name": request.team_name.upper(),
-            "leader_name": request.leader_name.upper()
+            "leader_name": request.leader_name.upper(),
+            "iterations_used": 0,
+            "max_retries": 5
         }
-        with open(initial_file, 'w') as f:
-            json.dump(initial_data, f, indent=2)
+        
+        try:
+            with open(initial_file, 'w') as f:
+                json.dump(initial_data, f, indent=2)
+        except Exception as write_err:
+             logger.error(f"Failed to write initial state: {write_err}")
+             raise HTTPException(status_code=500, detail=f"Filesystem Error: Could not save initial state to {RESULTS_DIR}")
 
-        # Trigger Background Task
-        # FastAPI handles sync functions in background tasks by running them in a threadpool.
+        # 3. Trigger Background Task
+        # Check if environment is correctly setup for cloning (token)
+        if not os.environ.get("GITHUB_TOKEN"):
+             logger.warning("GITHUB_TOKEN missing in environment! Push operations will fail.")
+
         background_tasks.add_task(run_healing_agent, request.repo_url, expected_branch, run_id)
         
         return {
@@ -138,9 +148,11 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
             "branch_name": expected_branch,
             "status": "QUEUED"
         }
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        logger.error(f"Failed to start agent: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to start agent: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Startup Error: {str(e)}")
 
 @app.get("/results/{run_id}")
 async def get_results(run_id: str):

@@ -172,7 +172,8 @@ def run_healing_pipeline(
     run_id: str,
     branch_name: str,
     ci_logs: str | None = None,
-    on_update: Any = None
+    on_update: Any = None,
+    initial_state: AgentState | None = None
 ) -> AgentState:
     """
     Execute full healing pipeline with progressive updates.
@@ -185,19 +186,30 @@ def run_healing_pipeline(
     logger.info("🚀 CI/CD Healing Intelligence Core — STARTING")
     logger.info("=" * 70)
 
-    initial_state = AgentState(
-        run_id=run_id,
-        repo_url=repo_url,
-        repo_path=repo_path,
-        branch_name=branch_name,
-        ci_logs=ci_logs,
-        max_retries=settings.MAX_RETRIES,
-        current_temperature=settings.OPENAI_TEMPERATURE_START,
-        temperature_min=settings.OPENAI_TEMPERATURE_MIN,
-        primary_model=settings.active_model,
-        fallback_model="static-analysis-engine",
-        fallback_triggered=False,
-    )
+    if initial_state is None:
+        initial_state = AgentState(
+            run_id=run_id,
+            repo_url=repo_url,
+            repo_path=repo_path,
+            branch_name=branch_name,
+            ci_logs=ci_logs,
+            max_retries=settings.MAX_RETRIES,
+            current_temperature=settings.OPENAI_TEMPERATURE_START,
+            temperature_min=settings.OPENAI_TEMPERATURE_MIN,
+            primary_model=settings.active_model,
+            fallback_model="static-analysis-engine",
+            fallback_triggered=False,
+        )
+    else:
+        # Sync required settings to the provided state
+        initial_state.max_retries = settings.MAX_RETRIES
+        initial_state.current_temperature = settings.OPENAI_TEMPERATURE_START
+        initial_state.temperature_min = settings.OPENAI_TEMPERATURE_MIN
+        initial_state.primary_model = settings.active_model
+        initial_state.fallback_model = "static-analysis-engine"
+        initial_state.repo_path = repo_path # Ensure absolute path
+        if ci_logs:
+            initial_state.ci_logs = ci_logs
 
     graph = build_healing_graph()
     final_state = initial_state

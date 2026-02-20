@@ -22,7 +22,12 @@ const Timeline = () => {
                 <h2 className="text-sm font-black uppercase tracking-widest text-slate-300 flex items-center gap-2">
                     ⏳ Execution Timeline
                 </h2>
-                <span className="text-[11px] text-slate-500 font-mono">{events.length} events</span>
+                <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-blue-400 font-mono font-bold bg-blue-900/30 px-2 py-0.5 rounded-md border border-blue-800/50">
+                        {currentResult.iterations_used ?? 0} / {currentResult.max_retries ?? 5} ITERATIONS
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono">{events.length} events</span>
+                </div>
             </div>
 
             <div className="px-6 py-4">
@@ -61,16 +66,16 @@ const Timeline = () => {
                     {isFinal && (
                         <div className="relative pl-8">
                             <div className={`absolute -left-[9px] top-1 w-4 h-4 rounded-full border-2 flex items-center justify-center ${isResolved ? 'bg-emerald-900 border-emerald-500' :
-                                    isPartial ? 'bg-amber-900 border-amber-500' :
-                                        'bg-red-900 border-red-500'
+                                isPartial ? 'bg-amber-900 border-amber-500' :
+                                    'bg-red-900 border-red-500'
                                 }`}>
                                 {isResolved && <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />}
                                 {isPartial && <CheckCircle2 className="w-2.5 h-2.5 text-amber-400 opacity-80" />}
                                 {!isResolved && !isPartial && <XCircle className="w-2.5 h-2.5 text-red-400" />}
                             </div>
                             <div className={`p-3 rounded-xl border font-black text-sm text-center uppercase tracking-widest ${isResolved ? 'border-emerald-700/50 bg-emerald-900/20 text-emerald-400' :
-                                    isPartial ? 'border-amber-700/50 bg-amber-900/20 text-amber-400' :
-                                        'border-red-700/50 bg-red-900/20 text-red-400'
+                                isPartial ? 'border-amber-700/50 bg-amber-900/20 text-amber-400' :
+                                    'border-red-700/50 bg-red-900/20 text-red-400'
                                 }`}>
                                 {isResolved ? '✅ All Tests Passed — CI RESOLVED' :
                                     isPartial ? '⚡ Partial Fix Applied — Static Issues Addressed' :

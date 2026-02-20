@@ -18,5 +18,9 @@ RESULTS_DIR = os.path.join(BASE_WRITABLE_DIR, "results")
 WORKSPACE_DIR = os.path.join(BASE_WRITABLE_DIR, "workspace")
 
 # Ensure directories exist
-os.makedirs(RESULTS_DIR, exist_ok=True)
-os.makedirs(WORKSPACE_DIR, exist_ok=True)
+try:
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    os.makedirs(WORKSPACE_DIR, exist_ok=True)
+except Exception as e:
+    # We don't crash here; we just log it. The API will handle missing dirs later.
+    print(f"Warning: Could not create directories: {e}")
