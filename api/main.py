@@ -27,8 +27,9 @@ def trigger_github_workflow(repo_url: str, branch_name: str, run_id: str, team_n
         logger.error("GITHUB_TOKEN not found in environment.")
         return False
         
-    # Try to find the repo name from env (Vercel provides this if connected to GitHub)
-    repo_owner_name = os.environ.get("GITHUB_REPOSITORY", "rohits-18/RIFTFINAL")
+    # Try to find the repo name dynamically
+    repo_owner_name = os.environ.get("GITHUB_REPOSITORY") or \
+                      (f"{os.environ.get('VERCEL_GIT_REPO_OWNER')}/{os.environ.get('VERCEL_GIT_REPO_SLUG')}" if os.environ.get('VERCEL_GIT_REPO_OWNER') else "rohits-18/RIFTFINAL")
     
     url = f"https://api.github.com/repos/{repo_owner_name}/actions/workflows/healing_agent.yml/dispatches"
     
@@ -216,6 +217,12 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
              )
         
         if not triggered_gha:
+            if os.environ.get("VERCEL"):
+                logger.error("GHA Trigger failed and running on Vercel. Blocking local fallback.")
+                raise HTTPException(
+                    status_code=401, 
+                    detail="Live Healing failed to start. CRITICAL: GITHUB_TOKEN is missing or invalid in your Vercel Environment Variables. The agent cannot clone repos without it. Please add GITHUB_TOKEN to your Vercel Project Settings."
+                )
             logger.info("Falling back to local background execution.")
             from backend.orchestrator.main import run_healing_agent
             background_tasks.add_task(run_healing_agent, request.repo_url, expected_branch, run_id)
@@ -243,7 +250,8 @@ async def get_results(run_id: str):
         if not os.path.exists(result_file_path):
             # PRO LIVE Fallback: Check GitHub Repo Directly (if agent ran via GHA)
             try:
-                repo_name = "rohits-18/RIFTFINAL"
+                repo_name = os.environ.get("GITHUB_REPOSITORY") or \
+                            (f"{os.environ.get('VERCEL_GIT_REPO_OWNER')}/{os.environ.get('VERCEL_GIT_REPO_SLUG')}" if os.environ.get('VERCEL_GIT_REPO_OWNER') else "rohits-18/RIFTFINAL")
                 github_url = f"https://raw.githubusercontent.com/{repo_name}/main/backend/results/{run_id}.json"
                 logger.info(f"Checking GitHub for result: {github_url}")
                 resp = requests.get(github_url)
