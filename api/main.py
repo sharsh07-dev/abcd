@@ -167,9 +167,12 @@ async def run_agent(request_data: RunAgentRequest, background_tasks: BackgroundT
             request_data.team_name, request_data.leader_name, request
         )
         
-        if not success and not os.environ.get("VERCEL"):
-            from backend.orchestrator.main import run_healing_agent
-            background_tasks.add_task(run_healing_agent, request_data.repo_url, expected_branch, run_id)
+        if not success:
+            if os.environ.get("VERCEL"):
+                raise HTTPException(status_code=500, detail=f"Live Healing failed to start. REASON: {gha_error}")
+            else:
+                from backend.orchestrator.main import run_healing_agent
+                background_tasks.add_task(run_healing_agent, request_data.repo_url, expected_branch, run_id)
         
         return {
             "message": "Agent started (Cloud)" if success else "Agent started (Local)",

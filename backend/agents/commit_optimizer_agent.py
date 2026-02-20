@@ -184,8 +184,14 @@ class CommitOptimizerAgent:
             branch_name = self.state.branch_name or settings.GITHUB_TARGET_BRANCH
             logger.info(f"[CommitOptimizerAgent] Pushing branch {branch_name} to origin...")
             
+            # Pass environment variables to completely disable any possible interactive prompts
+            import os
+            env = dict(os.environ)
+            env['GIT_TERMINAL_PROMPT'] = '0'
+            env['GIT_ASKPASS'] = '/bin/echo'
+            
             # Force push might be needed if the branch already exists and we are iterating
-            self.repo.remotes.origin.push(f"{branch_name}:{branch_name}", force=True)
+            self.repo.remotes.origin.push(f"{branch_name}:{branch_name}", force=True, env=env)
             
             # Revert URL to original to avoid leaving token in logs/config
             self.repo.remotes.origin.set_url(origin_url)

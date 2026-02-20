@@ -65,6 +65,8 @@ class GeminiClient(BaseLLMClient):
         genai.configure(api_key=api_key)
         self._genai = genai
         self._model_name = settings.GEMINI_MODEL
+        if self._model_name == "gemini-1.5-flash":
+            self._model_name = "gemini-1.5-flash-latest"
         logger.info(f"[LLMClient] Using Google Gemini — model={self._model_name} (FREE tier)")
 
     def complete(
