@@ -223,10 +223,18 @@ export const useStore = create<AppState>()(
                             get().stopPolling();
                         }
                     } catch (err: any) {
+                        const { currentResult } = get();
+                        const isRecent = currentResult && (Date.now() / 1000 - (currentResult.start_time || 0) < 300); // 5 mins
+
+                        // If 404 but recent, keep polling (it might be GHA provisioning)
+                        if (err.response?.status === 404 && isRecent) {
+                            return; // Silent wait
+                        }
+
                         if (err.response?.status === 404 || err.response?.status === 400) {
                             get().stopPolling();
                             set({
-                                error: "Run results were lost or inaccessible (Serverless timeout/statelessness). Please deploy the backend to Railway/Render for persistence.",
+                                error: "Run results were lost or inaccessible. If using GHA, it might have timed out. Ensure your GITHUB_TOKEN is valid.",
                                 isLoading: false
                             });
                         }
