@@ -89,6 +89,17 @@ class GeminiClient(BaseLLMClient):
             response = model.generate_content(user_prompt)
             return response.text or ""
         except Exception as e:
+            err_msg = str(e).lower()
+            if "quota" in err_msg or "429" in err_msg:
+                logger.warning(f"[GeminiClient] Quota exhausted or rate limited. Error: {e}")
+                # Try fallback if Groq is configured
+                if settings.GROQ_API_KEY:
+                    logger.info("[LLMClient] 🔄 Falling back to Groq...")
+                    try:
+                        return GroqClient().complete(system_prompt, user_prompt, temperature, seed, json_mode)
+                    except Exception as fallback_err:
+                        logger.error(f"[LLMClient] Fallback to Groq failed: {fallback_err}")
+            
             logger.error(f"[GeminiClient] API error: {e}")
             raise
 

@@ -11,11 +11,28 @@ from api.models import RunResult, RunAgentRequest
 from backend.orchestrator.main import run_healing_agent 
 from backend.utils.paths import RESULTS_DIR
 
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi.responses import JSONResponse
+import logging
+import traceback
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Autonomous CI/CD Healing Core API")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global Exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "traceback": traceback.format_exc(),
+            "path": request.url.path
+        }
+    )
 
 # Setup CORS
 origins = [
@@ -47,6 +64,7 @@ async def root():
     }
 
 @app.get("/runs")
+@app.get("/api/runs")
 async def list_runs():
     """List all recent runs, sorted by modification time."""
     try:
@@ -86,6 +104,7 @@ async def list_runs():
         return []
 
 @app.post("/run-agent")
+@app.post("/api/run-agent")
 async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks):
     try:
         # Generate Run ID
@@ -155,6 +174,7 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
         raise HTTPException(status_code=500, detail=f"Startup Error: {str(e)}")
 
 @app.get("/results/{run_id}")
+@app.get("/api/results/{run_id}")
 async def get_results(run_id: str):
     """Retrieve the results JSON for a specific run_id — returns raw dict."""
     try:
