@@ -21,6 +21,14 @@ function App() {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30">
 
+            {/* ───── Vercel Warning Banner ───── */}
+            {(window.location.hostname.includes('vercel.app') || window.location.hostname.includes('shadow-agents')) && (
+                <div className="bg-red-600/90 text-white text-[11px] font-black uppercase tracking-[0.2em] py-2 px-4 text-center border-b border-red-500/50 flex items-center justify-center gap-3">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>Demo Mode: Backend on Vercel is Read-Only. Live healing requires Railway/Render hosting.</span>
+                </div>
+            )}
+
             {/* ───── Header ───── */}
             <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
