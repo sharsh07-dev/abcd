@@ -45,12 +45,19 @@ def trigger_github_workflow(repo_url: str, branch_name: str, run_id: str, team_n
     }
     
     try:
-        response = requests.post(url, headers=headers, json=data)
+        logger.info(f"[v1.13] Triggering GHA workflow at {url} for run {run_id}")
+        response = requests.post(url, headers=headers, json=data, timeout=10)
         if response.status_code == 204:
+            logger.info(f"✅ GHA Trigger Successful for {run_id}")
             return True, None
         else:
-            return False, f"GitHub API Error {response.status_code}: {response.text}"
+            err = f"GitHub API Error {response.status_code}: {response.text}"
+            logger.error(err)
+            return False, err
+    except requests.exceptions.Timeout:
+        return False, "GitHub API timed out. Please try again."
     except Exception as e:
+        logger.error(f"GHA Trigger Request Error: {e}")
         return False, f"Request Error: {str(e)}"
 
 app = FastAPI(title="Autonomous CI/CD Healing Core API")
@@ -233,12 +240,23 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
 @app.get("/results/{run_id}")
 @app.get("/api/results/{run_id}")
 async def get_results(run_id: str):
-    """Retrieve the results JSON for a specific run_id — returns raw dict."""
+    """Retrieve the results JSON for a specific run_id — with Vercel/Cloud-first fallback."""
     try:
         result_file_path = os.path.join(RESULTS_DIR, f"{run_id}.json")
+        local_data = None
+        
+        # Read local cache if it exists
+        if os.path.exists(result_file_path):
+            try:
+                with open(result_file_path, 'r') as f:
+                    local_data = json.load(f)
+            except Exception as e:
+                logger.error(f"Error reading local result {run_id}: {e}")
 
-        if not os.path.exists(result_file_path):
-            # PRO LIVE Fallback: Check GitHub Repo Directly (if agent ran via GHA)
+        # CLOUD-FIRST LOGIC: If we are on Vercel OR local file is PENDING/placeholder,
+        # we MUST check GitHub for the real-time agent status.
+        is_placeholder = not local_data or local_data.get("ci_status") == "PENDING"
+        if os.environ.get("VERCEL") or is_placeholder:
             try:
                 repo_name = os.environ.get("GITHUB_REPOSITORY") or \
                             (f"{os.environ.get('VERCEL_GIT_REPO_OWNER')}/{os.environ.get('VERCEL_GIT_REPO_SLUG')}" if os.environ.get('VERCEL_GIT_REPO_OWNER') else "rohits-18/RIFTFINAL")
@@ -246,28 +264,30 @@ async def get_results(run_id: str):
                 # Check BOTH main and master branches for reliability
                 for branch in ["main", "master"]:
                     github_url = f"https://raw.githubusercontent.com/{repo_name}/{branch}/backend/results/{run_id}.json"
-                    logger.info(f"Checking GitHub {branch} for result: {github_url}")
-                    resp = requests.get(github_url)
+                    logger.info(f"[v1.13] Checking GitHub {branch} for latest stats: {github_url}")
+                    resp = requests.get(github_url, timeout=5)
                     if resp.status_code == 200:
-                        return resp.json()
+                        cloud_data = resp.json()
+                        # If cloud data is more advanced than local placeholder, use it
+                        return cloud_data
             except Exception as gh_err:
-                logger.debug(f"GitHub fallback failed: {gh_err}")
+                logger.debug(f"GitHub cloud fetch attempt failed: {gh_err}")
 
-            raise HTTPException(status_code=404, detail="Results not found yet. Agent might still be starting.")
-
-        with open(result_file_path, 'r') as f:
-            data = json.load(f)
+        # Fallback to local data if available
+        if local_data:
             # Dynamically compute elapsed time while agent is still running
             import time as _time
-            if data.get("start_time") and data.get("ci_status") not in ("RESOLVED", "FAILED"):
-                data["elapsed_seconds"] = round(_time.time() - data["start_time"], 1)
-            return data
+            if local_data.get("start_time") and local_data.get("ci_status") not in ("RESOLVED", "FAILED"):
+                local_data["elapsed_seconds"] = round(_time.time() - local_data["start_time"], 1)
+            return local_data
+
+        raise HTTPException(status_code=404, detail="Mission results not found. Agent may be initializing in the cloud.")
 
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"Error retrieving results: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        logger.error(f"Critical error in get_results: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Internal Server Error retrieving mission data")
 
 
 # --- CI Monitoring Endpoints ---

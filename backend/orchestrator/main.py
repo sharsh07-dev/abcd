@@ -127,89 +127,96 @@ _write_lock = threading.Lock()
 def _write_results(state: AgentState):
     """Writes current AgentState to results.json for dashboard consumption."""
     with _write_lock:
-        status_mapped = state.ci_status
-    if status_mapped == "SUCCESS":
-        status_mapped = "RESOLVED"
-    elif status_mapped == "RUNNING":
-        status_mapped = "IN_PROGRESS"
+        try:
+            status_mapped = str(state.ci_status)
+            if status_mapped == "SUCCESS":
+                status_mapped = "RESOLVED"
+            elif status_mapped in ("RUNNING", "CIStatus.RUNNING", "IN_PROGRESS"):
+                status_mapped = "IN_PROGRESS"
 
-    scoring_data = {
-        "base_score": 100.0, "speed_factor": 0.0, "fix_efficiency": 0.0,
-        "regression_penalty": 0.0, "final_ci_score": 0.0
-    }
-    if state.scoring:
-        # Map backend model → dashboard contract
-        base = getattr(state.scoring, 'base_score', 100.0)
-        speed = getattr(state.scoring, 'speed_factor', 0.0)
-        efficiency = getattr(state.scoring, 'fix_efficiency', 0.0)
-        penalty = getattr(state.scoring, 'regression_penalty', 0.0)
-        total = getattr(state.scoring, 'total_score', 0.0)
-        scoring_data = {
-            "base_score": base,
-            "speed_factor": speed,
-            "fix_efficiency": efficiency,
-            "regression_penalty": penalty,
-            "final_ci_score": total
-        }
+            scoring_data = {
+                "base_score": 100.0, "speed_factor": 0.0, "fix_efficiency": 0.0,
+                "regression_penalty": 0.0, "final_ci_score": 0.0
+            }
+            try:
+                if state.scoring:
+                    # Map backend model → dashboard contract
+                    base = float(getattr(state.scoring, 'base_score', 100.0))
+                    speed = float(getattr(state.scoring, 'speed_factor', 0.0))
+                    efficiency = float(getattr(state.scoring, 'fix_efficiency', 0.0))
+                    penalty = float(getattr(state.scoring, 'regression_penalty', 0.0))
+                    total = float(getattr(state.scoring, 'total_score', 0.0))
+                    scoring_data = {
+                        "base_score": base,
+                        "speed_factor": speed,
+                        "fix_efficiency": efficiency,
+                        "regression_penalty": penalty,
+                        "final_ci_score": total
+                    }
+            except Exception as sc_err:
+                logger.error(f"Scoring mapping error: {sc_err}")
 
-    fixes_data = []
-    if state.fixes:
-        for i, fix in enumerate(state.fixes):
-            rel_path = fix.file_path
-            repo_path_str = str(state.repo_path)
-            if rel_path.startswith(repo_path_str):
-                rel_path = os.path.relpath(rel_path, repo_path_str)
-            
-            # Clean up error type (remove Enum prefix)
-            err_type = str(fix.failure_type).split('.')[-1]
-            
-            fixes_data.append({
-                "file_path": rel_path,
-                "error_type": err_type,
-                "original_snippet": fix.original_code,
-                "patched_snippet": fix.patched_code,
-                "tests_passed": fix.validated,
-                "line_number": getattr(fix, 'line_number', None),
-                "commit_message": f"[AI-AGENT] Fix {err_type} in {os.path.basename(rel_path)}"
-            })
+            fixes_data = []
+            if state.fixes:
+                for fix in state.fixes:
+                    try:
+                        rel_path = fix.file_path
+                        repo_path_str = str(state.repo_path)
+                        if rel_path.startswith(repo_path_str):
+                            rel_path = os.path.relpath(rel_path, repo_path_str)
+                        
+                        err_type = str(fix.failure_type).split('.')[-1]
+                        
+                        fixes_data.append({
+                            "file_path": rel_path,
+                            "error_type": err_type,
+                            "original_snippet": fix.original_code,
+                            "patched_snippet": fix.patched_code,
+                            "tests_passed": fix.validated,
+                            "line_number": getattr(fix, 'line_number', None),
+                            "commit_message": f"[AI-AGENT] Fix {err_type} in {os.path.basename(rel_path)}"
+                        })
+                    except Exception as fix_err:
+                        logger.error(f"Error mapping fix data: {fix_err}")
 
-    timeline_strings = []
-    if hasattr(state, 'timeline') and state.timeline:
-        for event in state.timeline:
-            timeline_strings.append(event.description)
+            timeline_strings = []
+            if hasattr(state, 'timeline') and state.timeline:
+                for event in state.timeline:
+                    timeline_strings.append(str(event.description))
 
-    # Compute elapsed time
-    start_t = getattr(state, 'start_time', None) or time.time()
-    elapsed = round(time.time() - start_t, 1)
+            # Compute elapsed time
+            start_t = getattr(state, 'start_time', None) or time.time()
+            elapsed = round(time.time() - start_t, 1)
 
-    # Parse team/leader from branch name (TEAM_NAME_LEADER_NAME_AI_FIX)
-    # RIFT_ORGANISERS_SAIYAM_KUMAR_AI_FIX -> Team: RIFT_ORGANISERS, Leader: SAIYAM_KUMAR
-    branch_parts = state.branch_name.replace("_AI_FIX", "").split('_')
-    mid = len(branch_parts) // 2
-    team_name = "_".join(branch_parts[:mid]) if len(branch_parts) > 1 else branch_parts[0]
-    leader_name = "_".join(branch_parts[mid:]) if len(branch_parts) > 1 else ""
+            # Parse team/leader
+            branch_parts = state.branch_name.replace("_AI_FIX", "").split('_')
+            mid = len(branch_parts) // 2
+            team_name = "_".join(branch_parts[:mid]) if len(branch_parts) > 1 else branch_parts[0]
+            leader_name = "_".join(branch_parts[mid:]) if len(branch_parts) > 1 else ""
 
-    result_data = {
-        "repo_url": state.repo_url,
-        "branch_name": state.branch_name,
-        "run_id": state.run_id,
-        "total_failures": len(state.failures) if state.failures else 0,
-        "total_fixes": len(fixes_data),
-        "ci_status": status_mapped,
-        "fixes": fixes_data,
-        "ci_timeline": timeline_strings,
-        "scoring": scoring_data,
-        "iterations_used": getattr(state, 'iteration', 0),
-        "max_retries": getattr(state, 'max_retries', 5),
-        "start_time": start_t,
-        "elapsed_seconds": elapsed,
-        "team_name": team_name,
-        "leader_name": leader_name
-    }
+            result_data = {
+                "repo_url": state.repo_url,
+                "branch_name": state.branch_name,
+                "run_id": state.run_id,
+                "total_failures": len(state.failures) if state.failures else 0,
+                "total_fixes": len(fixes_data),
+                "ci_status": status_mapped,
+                "fixes": fixes_data,
+                "ci_timeline": timeline_strings,
+                "scoring": scoring_data,
+                "iterations_used": getattr(state, 'iteration', 0),
+                "max_retries": getattr(state, 'max_retries', 5),
+                "start_time": start_t,
+                "elapsed_seconds": elapsed,
+                "team_name": team_name,
+                "leader_name": leader_name
+            }
 
-    result_file = os.path.join(RESULTS_DIR, f"{state.run_id}.json")
-    with open(result_file, 'w') as f:
-        json.dump(result_data, f, indent=2)
+            result_file = os.path.join(RESULTS_DIR, f"{state.run_id}.json")
+            with open(result_file, 'w') as f:
+                json.dump(result_data, f, indent=2)
+        except Exception as e:
+            logger.error(f"CRITICAL: Failed to write results: {e}\n{traceback.format_exc()}")
 
 def _write_failure(repo_url: str, branch_name: str, run_id: str, error_msg: str):
     result_file = os.path.join(RESULTS_DIR, f"{run_id}.json")

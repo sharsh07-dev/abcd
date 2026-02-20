@@ -48,17 +48,19 @@ jobs:
             "repo_url": "${{ github.event.inputs.repo_url }}",
             "branch_name": "${{ github.event.inputs.branch_name }}",
             "run_id": "${{ github.event.inputs.run_id }}",
-            "ci_status": "RUNNING",
-            "ci_timeline": ["Cloud Core provisioned", "Starting LangGraph agent mission..."],
+            "ci_status": "IN_PROGRESS",
+            "ci_timeline": ["Mission initialized", "Cloud Core provisioned successfully", "Spawning LangGraph Healing Engine..."],
             "scoring": {"base_score": 100, "speed_factor": 0, "fix_efficiency": 0, "regression_penalty": 0, "final_ci_score": 0},
             "start_time": '$(date +%s)',
-            "elapsed_seconds": 0
+            "elapsed_seconds": 0,
+            "team_name": "${{ github.event.inputs.team_name }}",
+            "leader_name": "${{ github.event.inputs.leader_name }}"
           }' > backend/results/${{ github.event.inputs.run_id }}.json
           git config --global user.name "AI-Healing-Agent"
           git config --global user.email "agent@codereborn.ai"
           git add backend/results/
-          git commit -m "status: mission ${{ github.event.inputs.run_id }} starting [skip ci]"
-          git push origin main
+          git commit -m "status: mission ${{ github.event.inputs.run_id }} active [skip ci]"
+          git push origin main || echo "Push failed, but assuming local data or retry"
 
       - name: Run Healing Agent
         env:

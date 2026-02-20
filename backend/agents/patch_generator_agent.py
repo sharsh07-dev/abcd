@@ -123,12 +123,24 @@ class PatchGeneratorAgent:
                 return self._generate_patch(failure, target_file)
 
         if file_to_failures:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = [executor.submit(process_file, f, fail) for f, fail in file_to_failures.items()]
-                for future in futures:
-                    patch = future.result()
-                    if patch:
-                        patches.append(patch)
+            try:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = [executor.submit(process_file, f, fail) for f, fail in file_to_failures.items()]
+                    for future in futures:
+                        try:
+                            patch = future.result()
+                            if patch:
+                                patches.append(patch)
+                        except Exception as e:
+                            logger.error(f"[PatchGeneratorAgent] Individual patch generation failed: {e}")
+            except Exception as e:
+                logger.error(f"[PatchGeneratorAgent] Parallel execution engine failed: {e}")
+                # Serial fallback if primary parallel engine fails
+                for target_file, failure in file_to_failures.items():
+                    try:
+                        patch = process_file(target_file, failure)
+                        if patch: patches.append(patch)
+                    except Exception: pass
 
         self.state.patches = patches
         elapsed = time.time() - t0

@@ -86,19 +86,29 @@ class RootCauseAgent:
             max_workers = min(len(file_to_failure), 4)
             logger.info(f"[RootCauseAgent] Launching parallel LLM analysis with {max_workers} workers...")
             
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(self._analyze_with_llm, f): f for f in file_to_failure.values()}
-                for future in futures:
-                    try:
-                        ok = future.result()
-                        if not ok:
-                            use_llm = False # Global signal to stop LLM if rate-limited
-                    except Exception as e:
-                        logger.error(f"[RootCauseAgent] Worker failed: {e}")
+            try:
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = {executor.submit(self._analyze_with_llm, f): f for f in file_to_failure.values()}
+                    for future in futures:
+                        try:
+                            ok = future.result()
+                            if not ok:
+                                use_llm = False # Global signal to stop LLM if rate-limited
+                        except Exception as e:
+                            logger.error(f"[RootCauseAgent] Worker failed: {e}")
+            except Exception as e:
+                logger.error(f"[RootCauseAgent] Parallel engine failed: {e}")
+                # Serial fallback (limited)
+                for f in list(file_to_failure.values())[:2]:
+                    try: self._analyze_with_llm(f)
+                    except Exception: pass
 
         # Always ensure static coverage for all failures
         for failure in self.state.failures:
-            self._analyze_static(failure)
+            try:
+                self._analyze_static(failure)
+            except Exception as e:
+                logger.error(f"[RootCauseAgent] Static analysis failed for {failure.failure_id[:8]}: {e}")
 
         elapsed = time.time() - t0
         self.state.timeline.append(CITimelineEvent(
