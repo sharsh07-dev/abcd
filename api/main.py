@@ -200,8 +200,12 @@ async def get_results(run_id: str, request: Request):
             try:
                 repo_name = get_repo_name(request)
                 for branch in ["main", "master"]:
-                    github_url = f"https://raw.githubusercontent.com/{repo_name}/{branch}/backend/results/{run_id}.json"
-                    resp = requests.get(github_url, timeout=5)
+                    github_url = f"https://raw.githubusercontent.com/{repo_name}/{branch}/backend/results/{run_id}.json?_v={int(time.time())}"
+                    resp = requests.get(
+                        github_url, 
+                        timeout=5,
+                        headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}
+                    )
                     if resp.status_code == 200:
                         return resp.json()
             except: pass
