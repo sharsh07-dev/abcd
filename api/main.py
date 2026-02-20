@@ -21,13 +21,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def trigger_github_workflow(repo_url: str, branch_name: str, run_id: str, team_name: str, leader_name: str):
-    """Triggers the GitHub Action workflow in the CodeReborn repo itself to run the agent."""
+    """Triggers the GitHub Action workflow. Returns (success, error_message)"""
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
-        logger.error("GITHUB_TOKEN not found in environment.")
-        return False
+        return False, "GITHUB_TOKEN missing in server environment."
         
-    # Try to find the repo name dynamically
     repo_owner_name = os.environ.get("GITHUB_REPOSITORY") or \
                       (f"{os.environ.get('VERCEL_GIT_REPO_OWNER')}/{os.environ.get('VERCEL_GIT_REPO_SLUG')}" if os.environ.get('VERCEL_GIT_REPO_OWNER') else "rohits-18/RIFTFINAL")
     
@@ -41,25 +39,19 @@ def trigger_github_workflow(repo_url: str, branch_name: str, run_id: str, team_n
     data = {
         "ref": "main",
         "inputs": {
-            "repo_url": repo_url,
-            "branch_name": branch_name,
-            "run_id": run_id,
-            "team_name": team_name,
-            "leader_name": leader_name
+            "repo_url": repo_url, "branch_name": branch_name, "run_id": run_id,
+            "team_name": team_name, "leader_name": leader_name
         }
     }
     
     try:
         response = requests.post(url, headers=headers, json=data)
         if response.status_code == 204:
-            logger.info(f"Triggered GHA for run_id={run_id}")
-            return True
+            return True, None
         else:
-            logger.error(f"Failed to trigger GHA: {response.status_code} - {response.text}")
-            return False
+            return False, f"GitHub API Error {response.status_code}: {response.text}"
     except Exception as e:
-        logger.error(f"Error triggering GHA: {e}")
-        return False
+        return False, f"Request Error: {str(e)}"
 
 app = FastAPI(title="Autonomous CI/CD Healing Core API")
 
@@ -107,7 +99,7 @@ async def root():
 
     return {
         "status": status_msg,
-        "api_version": "1.6.0 PRO LIVE (GHA)",
+        "api_version": "1.10.0 PRO LIVE (Final)",
         "git_available": bool(git_path),
         "git_executable": os.environ.get("GIT_PYTHON_GIT_EXECUTABLE"),
         "results_dir": str(RESULTS_DIR),
@@ -208,31 +200,29 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
              raise HTTPException(status_code=500, detail=f"Filesystem Error: Could not save initial state to {RESULTS_DIR}")
 
         # 3. Trigger Core Execution
-        # PRO LIVE Logic: Prefer GHA for headless persistence if token is set
-        triggered_gha = False
-        if os.environ.get("GITHUB_TOKEN"):
-             triggered_gha = trigger_github_workflow(
-                 request.repo_url, expected_branch, run_id, 
-                 request.team_name, request.leader_name
-             )
+        # PRO LIVE Logic: Trigger GHA for Cloud persistence
+        success, gha_error = trigger_github_workflow(
+            request.repo_url, expected_branch, run_id, 
+            request.team_name, request.leader_name
+        )
         
-        if not triggered_gha:
+        if not success:
             if os.environ.get("VERCEL"):
-                logger.error("GHA Trigger failed and running on Vercel. Blocking local fallback.")
+                logger.error(f"GHA Trigger failed on Vercel: {gha_error}")
                 raise HTTPException(
                     status_code=401, 
-                    detail="Live Healing failed to start. CRITICAL: GITHUB_TOKEN is missing or invalid in your Vercel Environment Variables. The agent cannot clone repos without it. Please add GITHUB_TOKEN to your Vercel Project Settings."
+                    detail=f"Live Healing failed to start. REASON: {gha_error}. Please ensure your GITHUB_TOKEN is valid and has 'workflow' scope in Vercel settings."
                 )
-            logger.info("Falling back to local background execution.")
+            logger.info(f"GHA Trigger skipped/failed ({gha_error}). Using local background task.")
             from backend.orchestrator.main import run_healing_agent
             background_tasks.add_task(run_healing_agent, request.repo_url, expected_branch, run_id)
         
         return {
-            "message": "Agent started (GHA)" if triggered_gha else "Agent started (Local)",
+            "message": "Agent started (Cloud)" if success else "Agent started (Local)",
             "run_id": run_id,
             "branch_name": expected_branch,
             "status": "QUEUED",
-            "execution_mode": "GHA" if triggered_gha else "LOCAL"
+            "execution_mode": "CLOUD" if success else "LOCAL"
         }
     except HTTPException as he:
         raise he
