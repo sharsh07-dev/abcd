@@ -21,14 +21,6 @@ function App() {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-500/30">
 
-            {/* ───── Vercel Warning Banner ───── */}
-            {(window.location.hostname.includes('vercel.app') || window.location.hostname.includes('shadow-agents')) && (
-                <div className="bg-red-600/90 text-white text-[11px] font-black uppercase tracking-[0.2em] py-2 px-4 text-center border-b border-red-500/50 flex items-center justify-center gap-3">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Demo Mode: Backend on Vercel is Read-Only. Live healing requires Railway/Render hosting.</span>
-                </div>
-            )}
-
             {/* ───── Header ───── */}
             <header className="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
                 <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
@@ -38,7 +30,7 @@ function App() {
                         </div>
                         <div>
                             <h1 className="text-lg font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-500">
-                                Autonomous CI/CD Healing Core <span className="text-[10px] opacity-50 font-mono ml-2">v1.3</span>
+                                Autonomous CI/CD Healing Core <span className="text-[10px] opacity-70 font-mono ml-2 border border-blue-500/30 px-1.5 py-0.5 rounded text-blue-400">PRO LIVE</span>
                             </h1>
                             <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600 tracking-widest uppercase">
                                 <span className="flex items-center gap-1"><ShieldCheck className="w-2.5 h-2.5 text-emerald-500" /> Multi-Agent</span>

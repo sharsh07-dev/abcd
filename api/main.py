@@ -65,7 +65,7 @@ async def root():
 
     return {
         "status": status_msg,
-        "version": "1.0.0",
+        "api_version": "1.0.0",
         "git_available": bool(git_path),
         "git_executable": os.environ.get("GIT_PYTHON_GIT_EXECUTABLE"),
         "results_dir": str(RESULTS_DIR),
@@ -122,12 +122,6 @@ async def run_agent(request: RunAgentRequest, background_tasks: BackgroundTasks)
         run_id = str(uuid4())
         logger.info(f"Received run-agent request for {request.repo_url} (Run ID: {run_id})")
         
-        if os.environ.get("VERCEL"):
-             raise HTTPException(
-                 status_code=400, 
-                 detail="Vercel environment detected. The Healing Agent cannot run on Vercel because it requires a persistent filesystem and the 'git' binary. Please deploy the Backend to Railway or Render using the provided Procfile."
-             )
-
         # Consistent Branch Name logic
         branch_prefix = f"{request.team_name}_{request.leader_name}".upper().replace(" ", "_")
         expected_branch = f"{branch_prefix}_AI_FIX"
