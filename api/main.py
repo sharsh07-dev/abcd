@@ -67,6 +67,7 @@ async def root():
         "status": status_msg,
         "version": "1.0.0",
         "git_available": bool(git_path),
+        "git_executable": os.environ.get("GIT_PYTHON_GIT_EXECUTABLE"),
         "results_dir": str(RESULTS_DIR),
         "is_writable": is_writable,
         "environment": "Vercel" if os.environ.get("VERCEL") else "Regular",

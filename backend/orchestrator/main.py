@@ -16,13 +16,24 @@ def run_healing_agent(repo_url: str, branch_name: str, run_id: str):
     3. Triggers the LangGraph healing pipeline with progressive updates
     """
     try:
+        import git
         from git import Repo
+        
+        # Force refresh if we have an explicit path set in env
+        git_exe = os.environ.get("GIT_PYTHON_GIT_EXECUTABLE")
+        if git_exe:
+            try:
+                git.refresh(git_exe)
+            except Exception:
+                pass
+
         from backend.orchestrator.graph import run_healing_pipeline
-    except ImportError as e:
+    except Exception as e:
         logger.error(f"Environmental Error: Required dependencies (git/graph) not available: {e}")
-        # Import internally to avoid another crash if it failed at top level
+        # Build a more helpful instruction for the user
+        advise = "Vercel does not support Git. Please deploy the backend to Railway, Render, or a custom VPS." if os.environ.get("VERCEL") else "Ensure Git is installed and in your PATH."
         from backend.orchestrator.main import _write_failure
-        _write_failure(repo_url, branch_name, run_id, f"Engine Error: Backend environment is missing 'git' or pipeline dependencies. (Error: {e})")
+        _write_failure(repo_url, branch_name, run_id, f"Engine Error: {e}. {advise}")
         return
 
     logger.info(f"Starting agent run {run_id} for {repo_url} on {branch_name}")
