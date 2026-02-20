@@ -199,13 +199,14 @@ async def get_results(run_id: str, request: Request):
         if is_pending:
             try:
                 repo_name = get_repo_name(request)
+                token = os.environ.get("GITHUB_TOKEN")
+                headers = {"Accept": "application/vnd.github.v3.raw", "Cache-Control": "no-cache"}
+                if token:
+                    headers["Authorization"] = f"token {token}"
+                    
                 for branch in ["main", "master"]:
-                    github_url = f"https://raw.githubusercontent.com/{repo_name}/{branch}/backend/results/{run_id}.json?_v={int(time.time())}"
-                    resp = requests.get(
-                        github_url, 
-                        timeout=5,
-                        headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}
-                    )
+                    github_url = f"https://api.github.com/repos/{repo_name}/contents/backend/results/{run_id}.json?ref={branch}"
+                    resp = requests.get(github_url, headers=headers, timeout=5)
                     if resp.status_code == 200:
                         return resp.json()
             except: pass

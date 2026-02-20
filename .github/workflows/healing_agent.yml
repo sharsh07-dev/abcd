@@ -61,9 +61,9 @@ jobs:
           }' > backend/results/${{ github.event.inputs.run_id }}.json
           git config --global user.name "AI-Healing-Agent"
           git config --global user.email "agent@codereborn.ai"
-          git add backend/results/
-          git commit -m "status: mission ${{ github.event.inputs.run_id }} active [skip ci]"
-          git push origin main || echo "Push failed, but assuming local data or retry"
+          git add -f backend/results/${{ github.event.inputs.run_id }}.json
+          git commit -m "status: mission ${{ github.event.inputs.run_id }} active [skip ci]" || echo "No changes"
+          git push origin HEAD:main || echo "Push failed, but assuming local data or retry"
 
       - name: Run Healing Agent
         env:
@@ -89,6 +89,6 @@ jobs:
         run: |
           git config --global user.name "AI-Healing-Agent"
           git config --global user.email "agent@codereborn.ai"
-          git add backend/results/
+          git add -f backend/results/
           git commit -m "chore: final results for ${{ github.event.inputs.run_id }} [skip ci]" || echo "No changes"
-          git push origin main
+          git push origin HEAD:main
